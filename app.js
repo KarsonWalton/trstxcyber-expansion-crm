@@ -1,6 +1,7 @@
 // --- DATABASE & MAP INITIALIZATION ---
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let db;
 
+// Map Setup
 const map = L.map('map').setView([33.8, -118.0], 10);
 L.tileLayer('https://api.maptiler.com/maps/streets-v2-dark/{z}/{x}/{y}.png?key=xzW3zqFAhBFSjDCyei9e', {
     attribution: '<a href="https://www.maptiler.com/copyright/">MapTiler</a>',
@@ -289,4 +290,34 @@ document.getElementById('search-btn').addEventListener('click', async () => {
     }
 });
 
-fetchSavedBusinesses();
+// --- SAFE ASYNC CONFIGURATION INITIALIZATION ---
+async function startApp() {
+    let url = window.SUPABASE_URL;
+    let key = window.SUPABASE_ANON_KEY;
+
+    // If local config.js is not present (like on Vercel), load from serverless API route
+    if (!url || !key) {
+        try {
+            const res = await fetch('/api/config');
+            const data = await res.json();
+            url = data.supabaseUrl;
+            key = data.supabaseAnonKey;
+        } catch (e) {
+            console.error("Could not load backend environment config keys:", e);
+        }
+    }
+
+    if (!url || !key) {
+        alert("Database connection parameters are missing. Configuration error.");
+        return;
+    }
+
+    // Initialize Supabase Client
+    db = supabase.createClient(url, key);
+    
+    // Begin data fetching
+    fetchSavedBusinesses();
+}
+
+// Start execution
+startApp();
