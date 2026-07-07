@@ -1,5 +1,6 @@
 // --- DATABASE & MAP INITIALIZATION ---
-let db;
+// 1. Declare the database variable without assigning it yet
+let db; 
 
 // Map Setup
 const map = L.map('map').setView([33.8, -118.0], 10);
@@ -11,7 +12,7 @@ L.tileLayer('https://api.maptiler.com/maps/streets-v2-dark/{z}/{x}/{y}.png?key=x
 const searchLayer = L.layerGroup().addTo(map);
 const savedLayer = L.layerGroup().addTo(map);
 
-let savedBusinesses = []; 
+let savedBusinesses = [];
 
 // --- TAB SWITCHING LOGIC ---
 document.getElementById('tab-search').addEventListener('click', () => switchTab('search'));
@@ -292,30 +293,35 @@ document.getElementById('search-btn').addEventListener('click', async () => {
 
 // --- SAFE ASYNC CONFIGURATION INITIALIZATION ---
 async function startApp() {
+    // Check if the keys are already attached to the window object (Local development)
     let url = window.SUPABASE_URL;
     let key = window.SUPABASE_ANON_KEY;
 
-    // If local config.js is not present (like on Vercel), load from serverless API route
+    // If local config.js is not present (like when running on Vercel), load from serverless API route
     if (!url || !key) {
         try {
             const res = await fetch('/api/config');
             const data = await res.json();
-            url = data.supabaseUrl;
-            key = data.supabaseAnonKey;
+            
+            // Map the case variants cleanly
+            url = data.supabaseUrl || data.SUPABASE_URL;
+            key = data.supabaseAnonKey || data.SUPABASE_ANON_KEY;
         } catch (e) {
             console.error("Could not load backend environment config keys:", e);
         }
     }
 
-    if (!url || !key) {
-        alert("Database connection parameters are missing. Configuration error.");
+    // Double check that we actually have strings before passing to Supabase
+    if (!url || !key || url.includes("YOUR_") || url === "undefined") {
+        console.error("Database connection parameters are invalid or missing. URL:", url);
         return;
     }
 
-    // Initialize Supabase Client
+    // Initialize the global client workspace safely
     db = supabase.createClient(url, key);
+    console.log("Supabase Client initialized successfully!");
     
-    // Begin data fetching
+    // Begin data fetching safely now that db is configured
     fetchSavedBusinesses();
 }
 
