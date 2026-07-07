@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Territory Expansion CRM</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Parent container for flexbox layout -->
+    <div class="app-container">
+        
+        <!-- SINGLE Sidebar container -->
+        <div class="sidebar">
+            
+            <!-- Tab Navigation -->
+            <div class="tabs">
+                <button id="tab-search" class="tab active">Territory Finder</button>
+                <button id="tab-saved" class="tab">My Clients</button>
+            </div>
+
+            <!-- The Search View -->
+            <div id="view-search">
+                <h2>Territory Finder</h2>
+                
+                <div class="input-group">
+                    <label for="industry-input">Industry</label>
+                    <input type="text" id="industry-input" placeholder="e.g., Plumbers, Solar, HVAC">
+                </div>
+                
+                <div class="input-group">
+                    <label for="location-input">Location</label>
+                    <input type="text" id="location-input" placeholder="e.g., Irvine, Long Beach">
+                </div>
+                
+                <button id="search-btn" class="search-button">Search Territory</button>
+                
+                <hr style="margin: 20px 0; border: 0; border-top: 1px solid #ddd;">
+                
+                <div class="input-group">
+                    <label for="status-filter">Filter by Status</label>
+                    <select id="status-filter">
+                        <option value="all">All Statuses</option>
+                        <option value="Researching">Researching</option>
+                        <option value="Contacted">Contacted</option>
+                        <option value="Won">Won</option>
+                        <option value="Lost">Lost</option>
+                    </select>
+                </div>
+
+                <!-- Container where search result cards will append -->
+                <div id="results-container"></div>
+            </div>
+
+            <!-- The Saved Clients View -->
+            <div id="view-saved" style="display: none;">
+                <h2>Saved Businesses</h2>
+                <div id="saved-container"></div>
+            </div>
+
+        </div>
+
+        <!-- The Map Viewport -->
+        <div id="map"></div>
+
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- Load Configuration Keys First -->
+    <script src="config.js"></script>
+    
+    <!-- Then load the App Logic -->
+    <script src="app.js"></script>
+</body>
+</html>
