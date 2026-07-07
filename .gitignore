@@ -8,4 +8,4 @@ Thumbs.db
 # Sensitive configuration
 .env
 .env.local
-config.js
+/config.js
