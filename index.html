@@ -5,27 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Territory Expansion CRM</title>
     
-    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
-    <!-- Custom CSS -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <!-- Parent container for flexbox layout -->
     <div class="app-container">
         
-        <!-- SINGLE Sidebar container -->
         <div class="sidebar">
             
-            <!-- Tab Navigation -->
             <div class="tabs">
                 <button id="tab-search" class="tab active">Territory Finder</button>
                 <button id="tab-saved" class="tab">My Clients</button>
             </div>
 
-            <!-- The Search View -->
             <div id="view-search">
                 <h2>Territory Finder</h2>
                 
@@ -54,11 +48,9 @@
                     </select>
                 </div>
 
-                <!-- Container where search result cards will append -->
                 <div id="results-container"></div>
             </div>
 
-            <!-- The Saved Clients View -->
             <div id="view-saved" style="display: none;">
                 <h2>Saved Businesses</h2>
                 <div id="saved-container"></div>
@@ -66,19 +58,22 @@
 
         </div>
 
-        <!-- The Map Viewport -->
         <div id="map"></div>
 
     </div>
 
-    <!-- Scripts -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
-    <!-- Load Configuration Keys First -->
+    <script>
+        // If running locally, your local config.js file will have already loaded these.
+        // If running on Vercel, Vercel will look for these strings and replace them with your real keys!
+        window.SUPABASE_URL = window.SUPABASE_URL || "process.env.SUPABASE_URL";
+        window.SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || "process.env.SUPABASE_ANON_KEY";
+    </script>
+    
     <script src="config.js"></script>
     
-    <!-- Then load the App Logic -->
     <script src="app.js"></script>
 </body>
 </html>
