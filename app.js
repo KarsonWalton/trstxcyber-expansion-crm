@@ -293,35 +293,35 @@ document.getElementById('search-btn').addEventListener('click', async () => {
 
 // --- SAFE ASYNC CONFIGURATION INITIALIZATION ---
 async function startApp() {
-    // Check if the keys are already attached to the window object (Local development)
     let url = window.SUPABASE_URL;
     let key = window.SUPABASE_ANON_KEY;
 
-    // If local config.js is not present (like when running on Vercel), load from serverless API route
+    // If running on Vercel, the local config.js will safely 404, meaning url/key are undefined. 
+    // If so, fetch them dynamically from the secure serverless backend.
     if (!url || !key) {
         try {
-            const res = await fetch('/api/config');
-            const data = await res.json();
+            const res = await fetch('/api/keys');
+            if (!res.ok) throw new Error("Vercel API returned status: " + res.status);
             
-            // Map the case variants cleanly
-            url = data.supabaseUrl || data.SUPABASE_URL;
-            key = data.supabaseAnonKey || data.SUPABASE_ANON_KEY;
+            const data = await res.json();
+            url = data.supabaseUrl;
+            key = data.supabaseAnonKey;
         } catch (e) {
             console.error("Could not load backend environment config keys:", e);
         }
     }
 
-    // Double check that we actually have strings before passing to Supabase
-    if (!url || !key || url.includes("YOUR_") || url === "undefined") {
-        console.error("Database connection parameters are invalid or missing. URL:", url);
+    // Final safety check before connecting to Supabase
+    if (!url || !key || url.includes("YOUR_")) {
+        console.error("Database connection parameters are missing. Map UI will not function.");
         return;
     }
 
-    // Initialize the global client workspace safely
+    // Initialize the global client workspace
     db = supabase.createClient(url, key);
     console.log("Supabase Client initialized successfully!");
     
-    // Begin data fetching safely now that db is configured
+    // Begin data fetching safely
     fetchSavedBusinesses();
 }
 
