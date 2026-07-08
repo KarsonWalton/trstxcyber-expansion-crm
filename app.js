@@ -9,6 +9,20 @@ L.tileLayer('https://api.maptiler.com/maps/streets-v2-dark/{z}/{x}/{y}.png?key=x
     tileSize: 512, zoomOffset: -1, minZoom: 0
 }).addTo(map);
 
+// --- HQ CUSTOM MARKER ---
+// 1. Define your custom image here with the new sizing and CSS class
+const hqIcon = L.icon({
+    iconUrl: 'hq-logo.png', 
+    iconSize: [26, 26],     // Scaled down to be smaller
+    iconAnchor: [13, 13],   // Adjusted to center the smaller icon perfectly
+    popupAnchor: [0, -13],  // Adjusted so popup clears the top of the icon
+    className: 'hq-custom-icon' // Applies the circle & white glow from style.css
+});
+
+// 2. Place the marker at the exact coordinates from the Google Maps screenshot
+const hqMarker = L.marker([33.74418, -118.02821], { icon: hqIcon }).addTo(map);
+hqMarker.bindPopup('<b>Our Headquarters</b><br>5762 Bolsa Ave<br>Huntington Beach, CA');
+
 const searchLayer = L.layerGroup().addTo(map);
 const savedLayer = L.layerGroup().addTo(map);
 
@@ -290,6 +304,67 @@ document.getElementById('search-btn').addEventListener('click', async () => {
         searchBtn.disabled = false;
     }
 });
+
+// --- FULL SCREEN DATABASE MODAL LOGIC ---
+const clientModal = document.getElementById('client-modal');
+
+// 1. Open / Close triggers
+document.getElementById('open-database-btn').addEventListener('click', () => {
+    clientModal.style.display = 'flex';
+    renderModalList(); // Build the list when opened
+});
+
+document.getElementById('close-modal').addEventListener('click', () => {
+    clientModal.style.display = 'none';
+});
+
+// 2. Search and Filter triggers
+document.getElementById('modal-search').addEventListener('input', renderModalList);
+document.getElementById('modal-filter').addEventListener('change', renderModalList);
+
+// 3. Render the filtered grid
+function renderModalList() {
+    const container = document.getElementById('modal-list');
+    container.innerHTML = ''; // Clear previous results
+    
+    const searchTerm = document.getElementById('modal-search').value.toLowerCase();
+    const filterStatus = document.getElementById('modal-filter').value;
+
+    // Filter the global savedBusinesses array
+    const filtered = savedBusinesses.filter(b => {
+        const matchesSearch = b.name.toLowerCase().includes(searchTerm) || (b.address && b.address.toLowerCase().includes(searchTerm));
+        const matchesFilter = filterStatus === 'all' || b.status === filterStatus;
+        return matchesSearch && matchesFilter;
+    });
+
+    if (filtered.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-muted);">No clients found matching that criteria.</p>';
+        return;
+    }
+
+    // Build a card for each matching client
+    filtered.forEach(b => {
+        const card = document.createElement('div');
+        card.className = 'card'; // Re-use your existing card styles
+        card.innerHTML = `
+            <h3 style="margin-top: 0;">${b.name}</h3>
+            <p>Status: <strong style="color: var(--accent);">${b.status}</strong></p>
+            <p style="font-size: 0.9em; color: var(--text-muted);">${b.address || 'No address saved'}</p>
+            <div class="action-btns">
+                <button onclick="flyToClient(${b.lat}, ${b.lng})" class="save-btn" style="background: var(--bg-input); color: var(--accent); border: 1px solid var(--accent);">
+                    Jump to Map
+                </button>
+            </div>
+        `;
+        container.appendChild(card);
+    });
+}
+
+// 4. Global function so the "Jump to Map" button works inside innerHTML
+window.flyToClient = function(lat, lng) {
+    clientModal.style.display = 'none'; // Close the modal
+    map.flyTo([lat, lng], 16);          // Zoom into the specific marker
+};
 
 // --- SAFE ASYNC CONFIGURATION INITIALIZATION ---
 async function startApp() {

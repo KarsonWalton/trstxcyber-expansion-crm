@@ -106,3 +106,52 @@ input, select {
     transform: scale(1.3);
     z-index: 1000 !important;
 }
+
+/* --- FULL SCREEN DATABASE MODAL --- */
+.modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.85); /* Dark background blur */
+    z-index: 9999; /* Ensures it sits above the map */
+    display: flex; justify-content: center; align-items: center;
+}
+
+.modal-content {
+    background: var(--bg-dark);
+    width: 85%; max-width: 1200px; height: 85%;
+    border: 1px solid var(--accent);
+    border-radius: 8px; padding: 25px;
+    display: flex; flex-direction: column;
+    position: relative; box-shadow: 0 0 30px rgba(0, 195, 245, 0.3);
+}
+
+.close-btn {
+    position: absolute; top: 15px; right: 25px;
+    font-size: 32px; color: var(--text-muted);
+    cursor: pointer; transition: 0.2s;
+}
+.close-btn:hover { color: var(--accent); }
+
+.modal-controls {
+    display: flex; gap: 15px; margin-bottom: 20px;
+}
+.modal-controls input, .modal-controls select {
+    padding: 12px; background: var(--bg-input);
+    color: var(--text-light); border: 1px solid var(--border-color);
+    border-radius: 4px; font-size: 1rem; flex: 1;
+}
+
+.modal-list-container {
+    overflow-y: auto; flex: 1;
+    display: grid; 
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); 
+    gap: 15px; padding-right: 10px;
+}
+
+/* --- HQ MARKER STYLING --- */
+.hq-custom-icon {
+    border-radius: 50%; /* Forces the image into a perfect circle */
+    border: 2px solid #ffffff; /* Crisp white border */
+    box-shadow: 0 0 12px 4px rgba(255, 255, 255, 0.7); /* White glowing halo effect */
+    background-color: var(--bg-dark); /* Dark background behind transparent images */
+    object-fit: cover; /* Ensures the image doesn't stretch weirdly */
+}
