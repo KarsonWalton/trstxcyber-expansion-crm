@@ -365,7 +365,7 @@ document.getElementById('search-btn').addEventListener('click', async () => {
         console.error("Search Error:", err);
         alert("Search failed: " + err.message);
     } finally {
-        searchBtn.innerText = "Search Territory";
+        searchBtn.innerText = "Search Area";
         searchBtn.disabled = false;
     }
 });
