@@ -155,3 +155,27 @@ input, select {
     background-color: var(--bg-dark); /* Dark background behind transparent images */
     object-fit: cover; /* Ensures the image doesn't stretch weirdly */
 }
+
+.card {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    padding: 15px;
+    border-radius: 8px;
+    transition: transform 0.2s;
+}
+.card:hover { border-color: var(--accent); }
+
+/* Ensure modal text is white and clean */
+#modal-list p {
+    color: #ffffff !important; 
+    margin: 5px 0;
+}
+
+/* Ensure link styling stands out */
+#modal-list a {
+    color: var(--accent) !important;
+    text-decoration: underline;
+}
+
+/* Ensure all card text is bright white */
+.card p, .card h3 { color: #ffffff !important; }

@@ -1,8 +1,6 @@
 // --- DATABASE & MAP INITIALIZATION ---
-// 1. Declare the database variable without assigning it yet
 let db; 
 
-// Map Setup
 const map = L.map('map').setView([33.8, -118.0], 10);
 L.tileLayer('https://api.maptiler.com/maps/streets-v2-dark/{z}/{x}/{y}.png?key=xzW3zqFAhBFSjDCyei9e', {
     attribution: '<a href="https://www.maptiler.com/copyright/">MapTiler</a>',
@@ -10,23 +8,25 @@ L.tileLayer('https://api.maptiler.com/maps/streets-v2-dark/{z}/{x}/{y}.png?key=x
 }).addTo(map);
 
 // --- HQ CUSTOM MARKER ---
-// 1. Define your custom image here with the new sizing and CSS class
 const hqIcon = L.icon({
     iconUrl: 'hq-logo.png', 
-    iconSize: [26, 26],     // Scaled down to be smaller
-    iconAnchor: [13, 13],   // Adjusted to center the smaller icon perfectly
-    popupAnchor: [0, -13],  // Adjusted so popup clears the top of the icon
-    className: 'hq-custom-icon' // Applies the circle & white glow from style.css
+    iconSize: [26, 26],     
+    iconAnchor: [13, 13],   
+    popupAnchor: [0, -13],  
+    className: 'hq-custom-icon' 
 });
 
-// 2. Place the marker at the exact coordinates from the Google Maps screenshot
-const hqMarker = L.marker([33.74418, -118.02821], { icon: hqIcon }).addTo(map);
+const hqMarker = L.marker([33.74418, -118.02821], {
+    icon: hqIcon,
+    zIndexOffset: 1000 
+}).addTo(map);
 hqMarker.bindPopup('<b>Our Headquarters</b><br>5762 Bolsa Ave<br>Huntington Beach, CA');
 
 const searchLayer = L.layerGroup().addTo(map);
 const savedLayer = L.layerGroup().addTo(map);
 
 let savedBusinesses = [];
+let currentSearchResults = []; // 🚨 NEW: Tracks current search for the "Save All" feature
 
 // --- TAB SWITCHING LOGIC ---
 document.getElementById('tab-search').addEventListener('click', () => switchTab('search'));
@@ -78,14 +78,18 @@ function renderSavedMarkersGlobally() {
     });
 }
 
-async function saveBusiness(prospect, status, buttonElement) {
+async function saveBusiness(prospect, status, buttonElement, details = null) {
     buttonElement.innerText = "Saving...";
+    
     const { error } = await db.from('saved_businesses').upsert({
         place_id: prospect.place_id,
         name: prospect.name,
         status: status,
         lat: prospect.lat, 
-        lng: prospect.lng
+        lng: prospect.lng,
+        phone: details?.nationalPhoneNumber || null,
+        website: details?.websiteUri || null,
+        rating: details?.rating ? details.rating.toString() : null
     }, { onConflict: 'place_id' });
 
     if (error) {
@@ -142,7 +146,6 @@ function createSidebarCard(prospect, containerId, isSaved = false) {
     card.className = 'result-card';
     card.innerHTML = `<div class="card-header">${cardNameDisplay}</div><div class="card-body" style="display:none;">Loading...</div>`;
 
-    // Glow Effect Logic
     const toggleCardAndMarker = (active) => {
         card.classList.toggle('active', active);
         if (marker && marker.getElement()) {
@@ -194,8 +197,8 @@ function createSidebarCard(prospect, containerId, isSaved = false) {
                     </div>
                 `;
 
-                body.querySelector('.btn-interested').addEventListener('click', (e) => saveBusiness(prospect, 'Interested', e.target));
-                body.querySelector('.btn-client').addEventListener('click', (e) => saveBusiness(prospect, 'Client', e.target));
+                body.querySelector('.btn-interested').addEventListener('click', (e) => saveBusiness(prospect, 'Interested', e.target, details));
+                body.querySelector('.btn-client').addEventListener('click', (e) => saveBusiness(prospect, 'Client', e.target, details));
                 
                 if (isAlreadySaved || isSaved) {
                     body.querySelector('.btn-delete').addEventListener('click', (e) => deleteSavedBusiness(prospect.place_id, e.target));
@@ -226,10 +229,75 @@ function renderSavedSidebar() {
     const sorted = [...savedBusinesses].sort((a, b) => a.status.localeCompare(b.status));
 
     sorted.forEach(p => {
-        const badgeColor = p.status === 'Interested' ? '#ffaa00' : '#00cc66';
-        p.displayName = `${p.name} <span style="font-size: 0.7em; padding: 2px 6px; margin-left: 6px; border-radius: 4px; background: ${badgeColor}; color: #000; font-weight: bold;">${p.status}</span>`;
+        const badgeColor = p.status === 'Interested' ? '#ffaa00' : p.status === 'Contacted' ? '#007bff' : '#00cc66';
+        p.displayName = `${p.name} <span style="font-size: 0.7em; padding: 2px 6px; margin-left: 6px; border-radius: 4px; background: ${badgeColor}; color: ${p.status === 'Contacted' ? '#fff' : '#000'}; font-weight: bold;">${p.status}</span>`;
         createSidebarCard(p, 'saved-container', true);
     });
+}
+
+// --- 🚨 NEW: BULK SAVE LOGIC & UI INJECTION 🚨 ---
+const bulkActionsDiv = document.createElement('div');
+bulkActionsDiv.id = 'bulk-actions';
+bulkActionsDiv.style.display = 'none';
+bulkActionsDiv.style.gap = '10px';
+bulkActionsDiv.style.margin = '15px 0';
+bulkActionsDiv.innerHTML = `
+    <button id="save-all-interested" class="save-btn btn-interested" style="flex: 1;">Save All Interested</button>
+    <button id="save-all-client" class="save-btn btn-client" style="flex: 1;">Save All Clients</button>
+`;
+const resultsContainer = document.getElementById('results-container');
+resultsContainer.parentNode.insertBefore(bulkActionsDiv, resultsContainer);
+
+document.getElementById('save-all-interested').addEventListener('click', (e) => bulkSave('Interested', e.target));
+document.getElementById('save-all-client').addEventListener('click', (e) => bulkSave('Client', e.target));
+
+async function bulkSave(status, buttonElement) {
+    const originalText = buttonElement.innerText;
+    buttonElement.disabled = true;
+
+    // Only grab results that haven't been saved yet
+    const unsaved = currentSearchResults.filter(p => !savedBusinesses.some(b => b.place_id === p.place_id));
+    
+    if (unsaved.length === 0) {
+        buttonElement.innerText = "All already saved!";
+        setTimeout(() => { buttonElement.innerText = originalText; buttonElement.disabled = false; }, 2000);
+        return;
+    }
+
+    let count = 0;
+    for (const prospect of unsaved) {
+        count++;
+        buttonElement.innerText = `Saving ${count} of ${unsaved.length}...`;
+        try {
+            // 🚨 Automatically fetches rich data so they don't say "N/A" in the DB 🚨
+            const { data: details } = await db.functions.invoke('get-place-details', { body: { placeId: prospect.place_id } });
+            
+            await db.from('saved_businesses').upsert({
+                place_id: prospect.place_id,
+                name: prospect.name,
+                status: status,
+                lat: prospect.lat, 
+                lng: prospect.lng,
+                phone: details?.nationalPhoneNumber || null,
+                website: details?.websiteUri || null,
+                rating: details?.rating ? details.rating.toString() : null
+            }, { onConflict: 'place_id' });
+
+            searchLayer.eachLayer(layer => {
+                if (layer.options.place_id === prospect.place_id) searchLayer.removeLayer(layer);
+            });
+        } catch (e) {
+            console.error("Failed to save:", prospect.name);
+        }
+    }
+
+    buttonElement.innerText = "All Saved ✓";
+    await fetchSavedBusinesses(); 
+    
+    setTimeout(() => {
+        buttonElement.innerText = originalText;
+        buttonElement.disabled = false;
+    }, 2000);
 }
 
 // --- SEARCH WITH CACHING LOGIC ---
@@ -245,19 +313,18 @@ document.getElementById('search-btn').addEventListener('click', async () => {
         await fetchSavedBusinesses(); 
         searchLayer.clearLayers(); 
         document.getElementById('results-container').innerHTML = ''; 
+        document.getElementById('bulk-actions').style.display = 'none';
 
         const bounds = map.getBounds();
         const ne = bounds.getNorthEast();
         const sw = bounds.getSouthWest();
 
-        // 1. Get whatever we already have in our cache for this area
         const { data: cachedProspects } = await db.from('prospects')
             .select('*')
             .ilike('industry', `%${industryInput}%`)
             .gte('lat', sw.lat).lte('lat', ne.lat)
             .gte('lng', sw.lng).lte('lng', ne.lng);
 
-        // 2. ALWAYS fetch from Google so we catch new ones when zoomed out
         console.log("Fetching fresh data from Google...");
         const { data: apiProspects, error } = await db.functions.invoke('search-places', {
             body: { query: industryInput, ne, sw }
@@ -265,7 +332,6 @@ document.getElementById('search-btn').addEventListener('click', async () => {
 
         if (error || !apiProspects || apiProspects.error) throw new Error(apiProspects?.error || "Search failed.");
 
-        // 3. Combine them and remove duplicates (using place_id)
         const cacheMap = new Map((cachedProspects || []).map(p => [p.place_id, p]));
         
         const newProspects = [];
@@ -282,18 +348,20 @@ document.getElementById('search-btn').addEventListener('click', async () => {
             }
         });
 
-        // 4. Silently save the new ones we found to the database
         if (newProspects.length > 0) {
             await db.from('prospects').upsert(newProspects);
         }
 
-        // 5. Render everything together
         const allProspects = [...(cachedProspects || []), ...newProspects];
         
+        // Update global state for Bulk Save feature
+        currentSearchResults = allProspects;
+
         if (allProspects.length === 0) {
             alert("No businesses found.");
         } else {
             allProspects.forEach(p => createSidebarCard(p, 'results-container', false));
+            document.getElementById('bulk-actions').style.display = 'flex'; // Show bulk buttons
         }
 
     } catch (err) {
@@ -305,54 +373,98 @@ document.getElementById('search-btn').addEventListener('click', async () => {
     }
 });
 
-// --- FULL SCREEN DATABASE MODAL LOGIC ---
+// --- 🚨 NEW: MODAL DATABASE QUICK ACTIONS 🚨 ---
+// Expose these to the window so the inline HTML buttons in the modal can access them
+window.updateClientStatus = async function(placeId, newStatus, buttonElement) {
+    buttonElement.innerText = "⏳";
+    const { error } = await db.from('saved_businesses').update({ status: newStatus }).eq('place_id', placeId);
+    if (!error) {
+        await fetchSavedBusinesses();
+        renderModalList(); 
+    } else {
+        buttonElement.innerText = "Error";
+    }
+};
+
+window.removeClientModal = async function(placeId, buttonElement) {
+    buttonElement.innerText = "⏳";
+    const { error } = await db.from('saved_businesses').delete().eq('place_id', placeId);
+    if (!error) {
+        await fetchSavedBusinesses();
+        renderModalList();
+    } else {
+        buttonElement.innerText = "Error";
+    }
+};
+
 const clientModal = document.getElementById('client-modal');
 
-// 1. Open / Close triggers
 document.getElementById('open-database-btn').addEventListener('click', () => {
     clientModal.style.display = 'flex';
-    renderModalList(); // Build the list when opened
+    renderModalList(); 
 });
 
 document.getElementById('close-modal').addEventListener('click', () => {
     clientModal.style.display = 'none';
 });
 
-// 2. Search and Filter triggers
 document.getElementById('modal-search').addEventListener('input', renderModalList);
 document.getElementById('modal-filter').addEventListener('change', renderModalList);
 
-// 3. Render the filtered grid
 function renderModalList() {
     const container = document.getElementById('modal-list');
-    container.innerHTML = ''; // Clear previous results
+    container.innerHTML = '';
     
     const searchTerm = document.getElementById('modal-search').value.toLowerCase();
     const filterStatus = document.getElementById('modal-filter').value;
 
-    // Filter the global savedBusinesses array
     const filtered = savedBusinesses.filter(b => {
         const matchesSearch = b.name.toLowerCase().includes(searchTerm) || (b.address && b.address.toLowerCase().includes(searchTerm));
         const matchesFilter = filterStatus === 'all' || b.status === filterStatus;
         return matchesSearch && matchesFilter;
     });
 
-    if (filtered.length === 0) {
-        container.innerHTML = '<p style="color: var(--text-muted);">No clients found matching that criteria.</p>';
-        return;
-    }
-
-    // Build a card for each matching client
     filtered.forEach(b => {
+        let statusColor = '#ffffff'; 
+        if (b.status === 'Interested') statusColor = '#ffaa00'; 
+        if (b.status === 'Contacted') statusColor = '#007bff'; 
+        if (b.status === 'Client') statusColor = '#28a745'; 
+
+        const phoneTxt = b.phone || 'N/A';
+        const ratingTxt = b.rating ? `${b.rating} ⭐` : 'N/A';
+        
+        let websiteHtml = 'N/A';
+        if (b.website && b.website.length > 2) {
+            const safeUrl = b.website.startsWith('http') ? b.website : 'https://' + b.website;
+            websiteHtml = `<a href="${safeUrl}" target="_blank" style="color: var(--accent); text-decoration: underline;">Visit Site</a>`;
+        }
+
         const card = document.createElement('div');
-        card.className = 'card'; // Re-use your existing card styles
+        card.className = 'card'; 
+        card.style.padding = '15px';
+        card.style.background = 'var(--bg-input)';
+        card.style.borderRadius = '6px';
+        card.style.marginBottom = '10px';
+
+        // 🚨 ADDED: Quick action buttons directly inside the Database Modal 🚨
         card.innerHTML = `
-            <h3 style="margin-top: 0;">${b.name}</h3>
-            <p>Status: <strong style="color: var(--accent);">${b.status}</strong></p>
-            <p style="font-size: 0.9em; color: var(--text-muted);">${b.address || 'No address saved'}</p>
-            <div class="action-btns">
-                <button onclick="flyToClient(${b.lat}, ${b.lng})" class="save-btn" style="background: var(--bg-input); color: var(--accent); border: 1px solid var(--accent);">
-                    Jump to Map
+            <h3 style="margin: 0 0 10px 0; color: var(--accent);">${b.name}</h3>
+            <p><strong>Status:</strong> <span style="color: ${statusColor}; font-weight: bold;">${b.status || 'N/A'}</span></p>
+            <p><strong>Rating:</strong> ${ratingTxt}</p>
+            <p><strong>Phone:</strong> ${phoneTxt}</p>
+            <p><strong>Website:</strong> ${websiteHtml}</p>
+            <p style="font-size: 0.85em; color: var(--text-muted); margin-top: 10px; margin-bottom: 15px;">${b.address || 'No address provided'}</p>
+            
+            <div style="display: flex; gap: 5px; margin-bottom: 10px; flex-wrap: wrap;">
+                <button onclick="updateClientStatus('${b.place_id}', 'Interested', this)" class="save-btn btn-interested" style="padding: 6px; font-size: 0.8em; flex: 1;">Interested</button>
+                <button onclick="updateClientStatus('${b.place_id}', 'Contacted', this)" class="save-btn" style="background: #007bff; color: white; padding: 6px; font-size: 0.8em; flex: 1;">Contacted</button>
+                <button onclick="updateClientStatus('${b.place_id}', 'Client', this)" class="save-btn btn-client" style="padding: 6px; font-size: 0.8em; flex: 1;">Client</button>
+                <button onclick="removeClientModal('${b.place_id}', this)" class="save-btn" style="background: #ff4d4d; color: white; padding: 6px; font-size: 0.8em; flex: 1;">Remove</button>
+            </div>
+
+            <div class="action-btns" style="margin-top: 0;">
+                <button onclick="flyToClient(${b.lat}, ${b.lng})" class="save-btn" style="background: var(--accent); color: #000; border: none; padding: 10px; cursor: pointer; border-radius: 4px; width: 100%;">
+                    View on Map
                 </button>
             </div>
         `;
@@ -360,10 +472,9 @@ function renderModalList() {
     });
 }
 
-// 4. Global function so the "Jump to Map" button works inside innerHTML
 window.flyToClient = function(lat, lng) {
-    clientModal.style.display = 'none'; // Close the modal
-    map.flyTo([lat, lng], 16);          // Zoom into the specific marker
+    clientModal.style.display = 'none'; 
+    map.flyTo([lat, lng], 16);          
 };
 
 // --- SAFE ASYNC CONFIGURATION INITIALIZATION ---
@@ -371,8 +482,6 @@ async function startApp() {
     let url = window.SUPABASE_URL;
     let key = window.SUPABASE_ANON_KEY;
 
-    // If running on Vercel, the local config.js will safely 404, meaning url/key are undefined. 
-    // If so, fetch them dynamically from the secure serverless backend.
     if (!url || !key) {
         try {
             const res = await fetch('/api/keys');
@@ -386,19 +495,15 @@ async function startApp() {
         }
     }
 
-    // Final safety check before connecting to Supabase
     if (!url || !key || url.includes("YOUR_")) {
         console.error("Database connection parameters are missing. Map UI will not function.");
         return;
     }
 
-    // Initialize the global client workspace
     db = supabase.createClient(url, key);
     console.log("Supabase Client initialized successfully!");
     
-    // Begin data fetching safely
     fetchSavedBusinesses();
 }
 
-// Start execution
 startApp();
