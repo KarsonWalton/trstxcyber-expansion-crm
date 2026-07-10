@@ -8,7 +8,7 @@ L.tileLayer('https://api.maptiler.com/maps/streets-v2-dark/{z}/{x}/{y}.png?key=x
 }).addTo(map);
 
 // --- HQ CUSTOM MARKER ---
-const hqLatLng = [33.74418, -118.02821]; // Stored as a variable for distance math later
+const hqLatLng = [33.74418, -118.02821]; 
 const hqIcon = L.icon({
     iconUrl: 'hq-logo.png', 
     iconSize: [26, 26],     
@@ -395,7 +395,7 @@ window.removeClientModal = async function(placeId, buttonElement) {
 
 const clientModal = document.getElementById('client-modal');
 
-// 🚨 NEW: Injecting the Sort Dropdown dynamically next to the filter 🚨
+// Injecting the Sort Dropdown dynamically next to the filter
 const modalControls = document.querySelector('.modal-controls');
 if (modalControls && !document.getElementById('modal-sort')) {
     const sortSelect = document.createElement('select');
@@ -428,22 +428,38 @@ function renderModalList() {
     const filterStatus = document.getElementById('modal-filter').value;
     const sortMethod = document.getElementById('modal-sort') ? document.getElementById('modal-sort').value : 'alpha';
 
-    // 1. Filter the array first
+    // 1. SMART FILTERING: Handles mismatched HTML dropdown values vs DB values
     let filtered = savedBusinesses.filter(b => {
         const matchesSearch = b.name.toLowerCase().includes(searchTerm) || (b.address && b.address.toLowerCase().includes(searchTerm));
-        const matchesFilter = filterStatus === 'all' || b.status === filterStatus;
+        
+        let matchesFilter = false;
+        const lowerFilter = filterStatus.toLowerCase();
+        const dbStatus = b.status ? b.status.toLowerCase() : '';
+
+        if (filterStatus === 'all') {
+            matchesFilter = true;
+        } else if (dbStatus === lowerFilter) {
+            matchesFilter = true;
+        } else if (lowerFilter.includes(dbStatus) || dbStatus.includes(lowerFilter)) {
+            // Allows "Researching (interested)" to match the database's "Interested"
+            matchesFilter = true;
+        } else if (lowerFilter.includes('researching') && dbStatus === 'interested') {
+             // Hard-coded safety net just in case
+             matchesFilter = true;
+        }
+
         return matchesSearch && matchesFilter;
     });
 
-    // 2. 🚨 NEW: Sort the filtered array 🚨
+    // 2. Sort the filtered array
     const hqPoint = L.latLng(hqLatLng[0], hqLatLng[1]); 
     filtered.sort((a, b) => {
         if (sortMethod === 'distance') {
             const distA = hqPoint.distanceTo(L.latLng(a.lat, a.lng));
             const distB = hqPoint.distanceTo(L.latLng(b.lat, b.lng));
-            return distA - distB; // Closest first
+            return distA - distB; 
         } else {
-            return a.name.localeCompare(b.name); // Default Alphabetical
+            return a.name.localeCompare(b.name); 
         }
     });
 
@@ -462,7 +478,6 @@ function renderModalList() {
             websiteHtml = `<a href="${safeUrl}" target="_blank" style="color: var(--accent); text-decoration: underline;">Visit Site</a>`;
         }
 
-        // 🚨 NEW: Calculate the distance to display on the card in miles 🚨
         const distMeters = hqPoint.distanceTo(L.latLng(b.lat, b.lng));
         const distMiles = (distMeters * 0.000621371).toFixed(1);
 
