@@ -8,6 +8,7 @@ L.tileLayer('https://api.maptiler.com/maps/streets-v2-dark/{z}/{x}/{y}.png?key=x
 }).addTo(map);
 
 // --- HQ CUSTOM MARKER ---
+const hqLatLng = [33.74418, -118.02821]; // Stored as a variable for distance math later
 const hqIcon = L.icon({
     iconUrl: 'hq-logo.png', 
     iconSize: [26, 26],     
@@ -16,7 +17,7 @@ const hqIcon = L.icon({
     className: 'hq-custom-icon' 
 });
 
-const hqMarker = L.marker([33.74418, -118.02821], {
+const hqMarker = L.marker(hqLatLng, {
     icon: hqIcon,
     zIndexOffset: 1000 
 }).addTo(map);
@@ -26,7 +27,7 @@ const searchLayer = L.layerGroup().addTo(map);
 const savedLayer = L.layerGroup().addTo(map);
 
 let savedBusinesses = [];
-let currentSearchResults = []; // 🚨 NEW: Tracks current search for the "Save All" feature
+let currentSearchResults = []; 
 
 // --- TAB SWITCHING LOGIC ---
 document.getElementById('tab-search').addEventListener('click', () => switchTab('search'));
@@ -235,7 +236,7 @@ function renderSavedSidebar() {
     });
 }
 
-// --- 🚨 NEW: BULK SAVE LOGIC & UI INJECTION 🚨 ---
+// --- BULK SAVE LOGIC & UI INJECTION ---
 const bulkActionsDiv = document.createElement('div');
 bulkActionsDiv.id = 'bulk-actions';
 bulkActionsDiv.style.display = 'none';
@@ -255,7 +256,6 @@ async function bulkSave(status, buttonElement) {
     const originalText = buttonElement.innerText;
     buttonElement.disabled = true;
 
-    // Only grab results that haven't been saved yet
     const unsaved = currentSearchResults.filter(p => !savedBusinesses.some(b => b.place_id === p.place_id));
     
     if (unsaved.length === 0) {
@@ -269,7 +269,6 @@ async function bulkSave(status, buttonElement) {
         count++;
         buttonElement.innerText = `Saving ${count} of ${unsaved.length}...`;
         try {
-            // 🚨 Automatically fetches rich data so they don't say "N/A" in the DB 🚨
             const { data: details } = await db.functions.invoke('get-place-details', { body: { placeId: prospect.place_id } });
             
             await db.from('saved_businesses').upsert({
@@ -353,15 +352,13 @@ document.getElementById('search-btn').addEventListener('click', async () => {
         }
 
         const allProspects = [...(cachedProspects || []), ...newProspects];
-        
-        // Update global state for Bulk Save feature
         currentSearchResults = allProspects;
 
         if (allProspects.length === 0) {
             alert("No businesses found.");
         } else {
             allProspects.forEach(p => createSidebarCard(p, 'results-container', false));
-            document.getElementById('bulk-actions').style.display = 'flex'; // Show bulk buttons
+            document.getElementById('bulk-actions').style.display = 'flex'; 
         }
 
     } catch (err) {
@@ -373,8 +370,7 @@ document.getElementById('search-btn').addEventListener('click', async () => {
     }
 });
 
-// --- 🚨 NEW: MODAL DATABASE QUICK ACTIONS 🚨 ---
-// Expose these to the window so the inline HTML buttons in the modal can access them
+// --- MODAL DATABASE QUICK ACTIONS & SORTING ---
 window.updateClientStatus = async function(placeId, newStatus, buttonElement) {
     buttonElement.innerText = "⏳";
     const { error } = await db.from('saved_businesses').update({ status: newStatus }).eq('place_id', placeId);
@@ -399,6 +395,19 @@ window.removeClientModal = async function(placeId, buttonElement) {
 
 const clientModal = document.getElementById('client-modal');
 
+// 🚨 NEW: Injecting the Sort Dropdown dynamically next to the filter 🚨
+const modalControls = document.querySelector('.modal-controls');
+if (modalControls && !document.getElementById('modal-sort')) {
+    const sortSelect = document.createElement('select');
+    sortSelect.id = 'modal-sort';
+    sortSelect.innerHTML = `
+        <option value="alpha">Sort: Alphabetical (A-Z)</option>
+        <option value="distance">Sort: Nearest to HQ</option>
+    `;
+    modalControls.appendChild(sortSelect);
+    sortSelect.addEventListener('change', renderModalList);
+}
+
 document.getElementById('open-database-btn').addEventListener('click', () => {
     clientModal.style.display = 'flex';
     renderModalList(); 
@@ -417,11 +426,25 @@ function renderModalList() {
     
     const searchTerm = document.getElementById('modal-search').value.toLowerCase();
     const filterStatus = document.getElementById('modal-filter').value;
+    const sortMethod = document.getElementById('modal-sort') ? document.getElementById('modal-sort').value : 'alpha';
 
-    const filtered = savedBusinesses.filter(b => {
+    // 1. Filter the array first
+    let filtered = savedBusinesses.filter(b => {
         const matchesSearch = b.name.toLowerCase().includes(searchTerm) || (b.address && b.address.toLowerCase().includes(searchTerm));
         const matchesFilter = filterStatus === 'all' || b.status === filterStatus;
         return matchesSearch && matchesFilter;
+    });
+
+    // 2. 🚨 NEW: Sort the filtered array 🚨
+    const hqPoint = L.latLng(hqLatLng[0], hqLatLng[1]); 
+    filtered.sort((a, b) => {
+        if (sortMethod === 'distance') {
+            const distA = hqPoint.distanceTo(L.latLng(a.lat, a.lng));
+            const distB = hqPoint.distanceTo(L.latLng(b.lat, b.lng));
+            return distA - distB; // Closest first
+        } else {
+            return a.name.localeCompare(b.name); // Default Alphabetical
+        }
     });
 
     filtered.forEach(b => {
@@ -439,6 +462,10 @@ function renderModalList() {
             websiteHtml = `<a href="${safeUrl}" target="_blank" style="color: var(--accent); text-decoration: underline;">Visit Site</a>`;
         }
 
+        // 🚨 NEW: Calculate the distance to display on the card in miles 🚨
+        const distMeters = hqPoint.distanceTo(L.latLng(b.lat, b.lng));
+        const distMiles = (distMeters * 0.000621371).toFixed(1);
+
         const card = document.createElement('div');
         card.className = 'card'; 
         card.style.padding = '15px';
@@ -446,10 +473,10 @@ function renderModalList() {
         card.style.borderRadius = '6px';
         card.style.marginBottom = '10px';
 
-        // 🚨 ADDED: Quick action buttons directly inside the Database Modal 🚨
         card.innerHTML = `
             <h3 style="margin: 0 0 10px 0; color: var(--accent);">${b.name}</h3>
             <p><strong>Status:</strong> <span style="color: ${statusColor}; font-weight: bold;">${b.status || 'N/A'}</span></p>
+            <p style="color: #00c3f5; font-weight: bold;"><strong>Distance:</strong> ${distMiles} miles from HQ</p>
             <p><strong>Rating:</strong> ${ratingTxt}</p>
             <p><strong>Phone:</strong> ${phoneTxt}</p>
             <p><strong>Website:</strong> ${websiteHtml}</p>
